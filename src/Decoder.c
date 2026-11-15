@@ -5559,6 +5559,10 @@ ZyanStatus ZydisDecoderDecodeFull(const ZydisDecoder* decoder,
     }
     if (!length)
     {
+        // Zero-length input is a valid runtime condition, not a caller bug: keep the output
+        // hygiene guarantee and leave no trusted-looking data behind.
+        ZYAN_MEMSET(instruction, 0, sizeof(*instruction));
+        ZYAN_MEMSET(operands, 0, sizeof(ZydisDecodedOperand) * ZYDIS_MAX_OPERAND_COUNT);
         return ZYDIS_STATUS_NO_MORE_DATA;
     }
     if (ZYDIS_DECODER_MODE_ACTIVE(decoder, ZYDIS_DECODER_MODE_MINIMAL))
@@ -5567,9 +5571,22 @@ ZyanStatus ZydisDecoderDecodeFull(const ZydisDecoder* decoder,
     }
 
     ZydisDecoderContext context;
-    ZYAN_CHECK(ZydisDecoderDecodeInstruction(decoder, &context, buffer, length, instruction));
-    ZYAN_CHECK(ZydisDecoderDecodeOperands(decoder, &context, instruction, operands,
-        instruction->operand_count));
+    ZyanStatus status = ZydisDecoderDecodeInstruction(decoder, &context, buffer, length,
+        instruction);
+    if (ZYAN_FAILED(status))
+    {
+        // Enforce output hygiene: no trusted-looking debris may survive a failed decode.
+        ZYAN_MEMSET(operands, 0, sizeof(ZydisDecodedOperand) * ZYDIS_MAX_OPERAND_COUNT);
+        return status;
+    }
+    status = ZydisDecoderDecodeOperands(decoder, &context, instruction, operands,
+        instruction->operand_count);
+    if (ZYAN_FAILED(status))
+    {
+        ZYAN_MEMSET(instruction, 0, sizeof(*instruction));
+        ZYAN_MEMSET(operands, 0, sizeof(ZydisDecodedOperand) * ZYDIS_MAX_OPERAND_COUNT);
+        return status;
+    }
     ZYAN_MEMSET(&operands[instruction->operand_count], 0,
         (ZYDIS_MAX_OPERAND_COUNT - instruction->operand_count) * sizeof(operands[0]));
 
@@ -5586,6 +5603,13 @@ ZyanStatus ZydisDecoderDecodeInstruction(const ZydisDecoder* decoder, ZydisDecod
 
     if (!length)
     {
+        // Zero-length input is a valid runtime condition, not a caller bug: keep the output
+        // hygiene guarantee and leave no trusted-looking data behind.
+        ZYAN_MEMSET(instruction, 0, sizeof(*instruction));
+        if (context)
+        {
+            ZYAN_MEMSET(context, 0, sizeof(*context));
+        }
         return ZYDIS_STATUS_NO_MORE_DATA;
     }
 
@@ -5609,8 +5633,20 @@ ZyanStatus ZydisDecoderDecodeInstruction(const ZydisDecoder* decoder, ZydisDecod
     instruction->machine_mode = decoder->machine_mode;
     instruction->stack_width = 16 << decoder->stack_width;
 
-    ZYAN_CHECK(ZydisCollectOptionalPrefixes(&state, instruction));
-    ZYAN_CHECK(ZydisDecodeInstruction(&state, instruction));
+    // A failed decode must not leave any partially written segment or operand data behind that
+    // later logic could mistake for a trusted (partial) result. The internal state machine has
+    // many failure points, so the output hygiene is enforced here at the public API boundary.
+    ZyanStatus status = ZydisCollectOptionalPrefixes(&state, instruction);
+    if (ZYAN_SUCCESS(status))
+    {
+        status = ZydisDecodeInstruction(&state, instruction);
+    }
+    if (ZYAN_FAILED(status))
+    {
+        ZYAN_MEMSET(instruction, 0, sizeof(*instruction));
+        ZYAN_MEMSET(context, 0, sizeof(*context));
+        return status;
+    }
 
     instruction->raw.encoding2 = instruction->encoding;
 
@@ -5650,7 +5686,14 @@ ZyanStatus ZydisDecoderDecodeOperands(const ZydisDecoder* decoder,
         return ZYAN_STATUS_SUCCESS;
     }
 
-    return ZydisDecodeOperands(decoder, context, instruction, operands, operand_count);
+    ZyanStatus status = ZydisDecodeOperands(decoder, context, instruction, operands,
+        operand_count);
+    if (ZYAN_FAILED(status))
+    {
+        // A failed operand decode must not leave partially populated operand slots behind.
+        ZYAN_MEMSET(operands, 0, sizeof(ZydisDecodedOperand) * operand_count);
+    }
+    return status;
 
 #endif
 }

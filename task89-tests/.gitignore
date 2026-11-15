@@ -1,0 +1,9 @@
+# Build artifacts and binaries
+segtrunc_test
+segtrunc_test_nosan
+ZydisInfo_asan
+guard_probe
+asan_probe
+smoke
+*.o
+*.a
