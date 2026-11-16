@@ -64,6 +64,19 @@ if tools_req
         dependencies: [zycore_dep],
         build_by_default: false,
       )
+      zydistestrelocation_exe = executable(
+        'ZydisTestRelocation',
+        files(
+          'ZydisTestRelocation.c',
+        ),
+        src + hdrs,
+        c_args: ['-DZYDIS_STATIC_BUILD'],
+        include_directories: [inc, inc_private],
+        implicit_include_directories: false,
+        dependencies: [zycore_dep],
+        build_by_default: false,
+      )
+      test('ZydisRelocation', zydistestrelocation_exe)
     endif
 
     zydisinfo_exe = executable(

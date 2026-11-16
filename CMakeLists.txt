@@ -429,6 +429,15 @@ if (ZYDIS_BUILD_TOOLS AND NOT ZYAN_NO_LIBC)
                 zyan_set_common_flags("ZydisTestEncoderAbsolute")
                 zyan_maybe_enable_wpo("ZydisTestEncoderAbsolute")
                 _maybe_set_emscripten_cfg("ZydisTestEncoderAbsolute")
+
+                add_executable("ZydisTestRelocation"
+                    "tools/ZydisTestRelocation.c")
+                target_link_libraries("ZydisTestRelocation" PUBLIC "Zydis")
+                set_target_properties("ZydisTestRelocation" PROPERTIES FOLDER "Tools")
+                target_compile_definitions("ZydisTestRelocation" PRIVATE "_CRT_SECURE_NO_WARNINGS")
+                zyan_set_common_flags("ZydisTestRelocation")
+                zyan_maybe_enable_wpo("ZydisTestRelocation")
+                _maybe_set_emscripten_cfg("ZydisTestRelocation")
             endif ()
         endif ()
 
@@ -549,13 +558,21 @@ if (ZYDIS_BUILD_TESTS)
     if (TARGET ZydisFuzzReEncoding AND TARGET ZydisFuzzEncoder AND TARGET ZydisTestEncoderAbsolute)
         add_test(
             NAME "ZydisRegressionEncoder"
-            COMMAND 
+            COMMAND
                 "${Python_EXECUTABLE}"
                 regression_encoder.py
                 $<TARGET_FILE:ZydisFuzzReEncoding>
                 $<TARGET_FILE:ZydisFuzzEncoder>
                 $<TARGET_FILE:ZydisTestEncoderAbsolute>
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/tests"
+        )
+    endif ()
+
+    if (TARGET ZydisTestRelocation)
+        add_test(
+            NAME "ZydisRelocation"
+            COMMAND
+                $<TARGET_FILE:ZydisTestRelocation>
         )
     endif ()
 endif ()
