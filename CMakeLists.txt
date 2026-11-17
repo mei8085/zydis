@@ -430,6 +430,15 @@ if (ZYDIS_BUILD_TOOLS AND NOT ZYAN_NO_LIBC)
                 zyan_maybe_enable_wpo("ZydisTestEncoderAbsolute")
                 _maybe_set_emscripten_cfg("ZydisTestEncoderAbsolute")
             endif ()
+
+            add_executable("ZydisTestEvexReversibility"
+                "tools/ZydisTestEvexReversibility.c")
+            target_link_libraries("ZydisTestEvexReversibility" PUBLIC "Zydis")
+            set_target_properties("ZydisTestEvexReversibility" PROPERTIES FOLDER "Tools")
+            target_compile_definitions("ZydisTestEvexReversibility" PRIVATE "_CRT_SECURE_NO_WARNINGS")
+            zyan_set_common_flags("ZydisTestEvexReversibility")
+            zyan_maybe_enable_wpo("ZydisTestEvexReversibility")
+            _maybe_set_emscripten_cfg("ZydisTestEvexReversibility")
         endif ()
 
         add_executable("ZydisInfo"
@@ -549,13 +558,20 @@ if (ZYDIS_BUILD_TESTS)
     if (TARGET ZydisFuzzReEncoding AND TARGET ZydisFuzzEncoder AND TARGET ZydisTestEncoderAbsolute)
         add_test(
             NAME "ZydisRegressionEncoder"
-            COMMAND 
+            COMMAND
                 "${Python_EXECUTABLE}"
                 regression_encoder.py
                 $<TARGET_FILE:ZydisFuzzReEncoding>
                 $<TARGET_FILE:ZydisFuzzEncoder>
                 $<TARGET_FILE:ZydisTestEncoderAbsolute>
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/tests"
+        )
+    endif ()
+
+    if (TARGET ZydisTestEvexReversibility)
+        add_test(
+            NAME "ZydisEvexReversibility"
+            COMMAND $<TARGET_FILE:ZydisTestEvexReversibility>
         )
     endif ()
 endif ()

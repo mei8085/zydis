@@ -26,6 +26,11 @@ if tests_req
     ],
     workdir: meson.current_source_dir(),
   )
+
+  test(
+    'ZydisEvexReversibility',
+    zydistestevexreversibility_exe,
+  )
 endif
 
 summary(
