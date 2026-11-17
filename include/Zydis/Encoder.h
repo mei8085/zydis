@@ -411,14 +411,23 @@ typedef struct ZydisEncoderRequest_
 /**
  * Encodes instruction with semantics specified in encoder request structure.
  *
+ * The instruction is encoded as a whole before anything is written to `buffer`. If the request
+ * cannot be encoded (invalid register combination, unrepresentable displacement, conflicting
+ * prefixes, ...) or if `buffer` is too small, the function fails. On failure `buffer` is left
+ * untouched and the variable pointed to by `length` is set to `0`, so no partially encoded
+ * instruction can be mistaken for a complete one.
+ *
  * @param   request     A pointer to the `ZydisEncoderRequest` struct.
  * @param   buffer      A pointer to the output buffer receiving encoded instruction.
- * @param   length      A pointer to the variable containing length of the output buffer. Upon 
+ * @param   length      A pointer to the variable containing length of the output buffer. Upon
  *                      successful return this variable receives length of the encoded instruction.
+ *                      On failure this variable is set to `0`.
  *
- * @return  A zyan status code.
+ * @return  A zyan status code. `ZYAN_STATUS_INSUFFICIENT_BUFFER_SIZE` is returned when the
+ *          instruction does not fit into `buffer`; `ZYDIS_STATUS_INSTRUCTION_TOO_LONG` is
+ *          returned when the instruction exceeds the architectural length limit.
  */
-ZYDIS_EXPORT ZyanStatus ZydisEncoderEncodeInstruction(const ZydisEncoderRequest *request, 
+ZYDIS_EXPORT ZyanStatus ZydisEncoderEncodeInstruction(const ZydisEncoderRequest *request,
     void *buffer, ZyanUSize *length);
 
 /**
@@ -427,11 +436,15 @@ ZYDIS_EXPORT ZyanStatus ZydisEncoderEncodeInstruction(const ZydisEncoderRequest 
  * predicts final instruction length prior to encoding and writes back calculated relative operands
  * to provided encoder request.
  *
+ * As with `ZydisEncoderEncodeInstruction`, `buffer` is only written to if the whole instruction
+ * was encoded successfully. On failure the passed request is restored to its original state, so a
+ * failed call does not affect subsequent calls that reuse the same request structure.
+ *
  * @param   request         A pointer to the `ZydisEncoderRequest` struct.
  * @param   buffer          A pointer to the output buffer receiving encoded instruction.
  * @param   length          A pointer to the variable containing length of the output buffer. Upon
  *                          successful return this variable receives length of the encoded
- *                          instruction.
+ *                          instruction. On failure this variable is set to `0`.
  * @param   runtime_address The runtime address of the instruction.
  *
  * @return  A zyan status code.

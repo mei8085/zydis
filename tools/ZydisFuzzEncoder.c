@@ -261,17 +261,38 @@ int ZydisFuzzTarget(ZydisStreamRead read_fn, void *stream_ctx)
         }
     }
 
+    // A failed encode must not expose a partial instruction: the length is zeroed and the
+    // output buffer is left untouched.
     ZyanU8 encoded_instruction[ZYDIS_MAX_INSTRUCTION_LENGTH];
+    ZYAN_MEMSET(encoded_instruction, 0xA5, sizeof(encoded_instruction));
     ZyanUSize encoded_length = sizeof(encoded_instruction);
     ZyanStatus status = ZydisEncoderEncodeInstruction(&request, encoded_instruction,
         &encoded_length);
     if (!ZYAN_SUCCESS(status))
     {
+        if (encoded_length != 0)
+        {
+            fputs("Failed encode reported a non-zero length\n", ZYAN_STDERR);
+            abort();
+        }
+        for (ZyanUSize i = 0; i < sizeof(encoded_instruction); ++i)
+        {
+            if (encoded_instruction[i] != 0xA5)
+            {
+                fputs("Failed encode modified the output buffer\n", ZYAN_STDERR);
+                abort();
+            }
+        }
 #ifdef ZYDIS_LIBFUZZER
         return EXIT_SUCCESS;
 #else
         return EXIT_ENCODING_FAILURE;
 #endif // ZYDIS_LIBFUZZER
+    }
+    if ((encoded_length == 0) || (encoded_length > sizeof(encoded_instruction)))
+    {
+        fputs("Encode reported an invalid length\n", ZYAN_STDERR);
+        abort();
     }
 
     ZydisStackWidth stack_width;

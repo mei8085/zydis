@@ -624,6 +624,166 @@ static ZyanBool RunRangeTests(void)
     return all_passed;
 }
 
+/**
+ * Checks that a rejected encoder request leaves no usable partial instruction behind.
+ *
+ * A failed call must report a zero length and must not modify the output buffer. A subsequent
+ * valid request that reuses the same buffer must still succeed.
+ */
+static ZyanBool RunFailureContractTests(void)
+{
+    ZyanBool all_passed = ZYAN_TRUE;
+    ZyanU8 buffer[ZYDIS_MAX_INSTRUCTION_LENGTH + 1];
+
+    // A valid `mov rax, rbx` request used to verify that a preceding failure has no effect.
+    ZydisEncoderRequest valid;
+    ZYAN_MEMSET(&valid, 0, sizeof(valid));
+    valid.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    valid.mnemonic = ZYDIS_MNEMONIC_MOV;
+    valid.operand_count = 2;
+    valid.operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
+    valid.operands[0].reg.value = ZYDIS_REGISTER_RAX;
+    valid.operands[1].type = ZYDIS_OPERAND_TYPE_REGISTER;
+    valid.operands[1].reg.value = ZYDIS_REGISTER_RBX;
+
+    struct
+    {
+        const char *name;
+        ZydisEncoderRequest request;
+        ZyanUSize capacity;
+    } cases[5];
+
+    // Illegal register combination: `ESP` cannot be used as a SIB index.
+    ZYAN_MEMSET(&cases[0].request, 0, sizeof(ZydisEncoderRequest));
+    cases[0].name = "illegal register combination";
+    cases[0].request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    cases[0].request.mnemonic = ZYDIS_MNEMONIC_MOV;
+    cases[0].request.operand_count = 2;
+    cases[0].request.operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
+    cases[0].request.operands[0].reg.value = ZYDIS_REGISTER_RAX;
+    cases[0].request.operands[1].type = ZYDIS_OPERAND_TYPE_MEMORY;
+    cases[0].request.operands[1].mem.base = ZYDIS_REGISTER_RBX;
+    cases[0].request.operands[1].mem.index = ZYDIS_REGISTER_RSP;
+    cases[0].request.operands[1].mem.scale = 1;
+    cases[0].request.operands[1].mem.size = 8;
+    cases[0].capacity = sizeof(buffer);
+
+    // Unrepresentable displacement: `RIP`-relative addressing is limited to a 32-bit
+    // displacement, which this absolute address does not fit into.
+    ZYAN_MEMSET(&cases[1].request, 0, sizeof(ZydisEncoderRequest));
+    cases[1].name = "unrepresentable displacement";
+    cases[1].request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    cases[1].request.mnemonic = ZYDIS_MNEMONIC_MOV;
+    cases[1].request.operand_count = 2;
+    cases[1].request.operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
+    cases[1].request.operands[0].reg.value = ZYDIS_REGISTER_EAX;
+    cases[1].request.operands[1].type = ZYDIS_OPERAND_TYPE_MEMORY;
+    cases[1].request.operands[1].mem.base = ZYDIS_REGISTER_RIP;
+    cases[1].request.operands[1].mem.displacement = 0x100000000LL;
+    cases[1].request.operands[1].mem.size = 4;
+    cases[1].capacity = sizeof(buffer);
+
+    // Conflicting prefixes.
+    cases[2].request = valid;
+    cases[2].name = "conflicting prefixes";
+    cases[2].request.prefixes = ZYDIS_ATTRIB_HAS_SEGMENT_CS | ZYDIS_ATTRIB_HAS_SEGMENT_SS;
+    cases[2].capacity = sizeof(buffer);
+
+    // Insufficient output buffer (the valid instruction needs 3 bytes).
+    cases[3].request = valid;
+    cases[3].name = "insufficient buffer";
+    cases[3].capacity = 2;
+
+    // Zero-sized output buffer.
+    cases[4].request = valid;
+    cases[4].name = "zero-sized buffer";
+    cases[4].capacity = 0;
+
+    for (ZyanUSize i = 0; i < ZYAN_ARRAY_LENGTH(cases); ++i)
+    {
+        ZyanBool passed = ZYAN_TRUE;
+
+        // Absolute encoding, which may patch the request before failing
+        ZydisEncoderRequest request = cases[i].request;
+        const ZydisEncoderRequest request_backup = request;
+        ZYAN_MEMSET(buffer, 0xA5, sizeof(buffer));
+        ZyanUSize length = cases[i].capacity;
+        ZyanStatus status = ZydisEncoderEncodeInstructionAbsolute(&request, buffer, &length,
+            0x0000000010000000ULL);
+        if (ZYAN_SUCCESS(status))
+        {
+            ZYAN_PRINTF("%s (absolute): UNEXPECTEDLY ENCODED\n", cases[i].name);
+            all_passed = ZYAN_FALSE;
+            continue;
+        }
+        if (length != 0)
+        {
+            ZYAN_PRINTF("%s (absolute): NON-ZERO LENGTH %zu\n", cases[i].name, length);
+            passed = ZYAN_FALSE;
+        }
+        for (ZyanUSize j = 0; j < sizeof(buffer); ++j)
+        {
+            if (buffer[j] != 0xA5)
+            {
+                ZYAN_PRINTF("%s (absolute): OUTPUT BUFFER MODIFIED AT %zu\n", cases[i].name, j);
+                passed = ZYAN_FALSE;
+                break;
+            }
+        }
+        if (ZYAN_MEMCMP(&request, &request_backup, sizeof(request)))
+        {
+            ZYAN_PRINTF("%s (absolute): REQUEST MUTATED ON FAILURE\n", cases[i].name);
+            passed = ZYAN_FALSE;
+        }
+
+        // Plain encoding
+        request = cases[i].request;
+        ZYAN_MEMSET(buffer, 0xA5, sizeof(buffer));
+        length = cases[i].capacity;
+        status = ZydisEncoderEncodeInstruction(&request, buffer, &length);
+        if (ZYAN_SUCCESS(status))
+        {
+            ZYAN_PRINTF("%s: UNEXPECTEDLY ENCODED\n", cases[i].name);
+            all_passed = ZYAN_FALSE;
+            continue;
+        }
+        if (length != 0)
+        {
+            ZYAN_PRINTF("%s: NON-ZERO LENGTH %zu\n", cases[i].name, length);
+            passed = ZYAN_FALSE;
+        }
+        for (ZyanUSize j = 0; j < sizeof(buffer); ++j)
+        {
+            if (buffer[j] != 0xA5)
+            {
+                ZYAN_PRINTF("%s: OUTPUT BUFFER MODIFIED AT %zu\n", cases[i].name, j);
+                passed = ZYAN_FALSE;
+                break;
+            }
+        }
+
+        // A valid request on the same buffer must not be affected by the failure above.
+        request = valid;
+        ZYAN_MEMSET(buffer, 0xA5, sizeof(buffer));
+        length = sizeof(buffer);
+        status = ZydisEncoderEncodeInstruction(&request, buffer, &length);
+        if (ZYAN_FAILED(status) || (length != 3) || (buffer[0] != 0x48) || (buffer[1] != 0x89) ||
+            (buffer[2] != 0xD8))
+        {
+            ZYAN_PRINTF("%s: FOLLOW-UP ENCODE FAILED\n", cases[i].name);
+            passed = ZYAN_FALSE;
+        }
+
+        if (passed)
+        {
+            ZYAN_PRINTF("%s: PASSED\n", cases[i].name);
+        }
+        all_passed &= passed;
+    }
+
+    return all_passed;
+}
+
 /* ============================================================================================== */
 /* Entry point                                                                                    */
 /* ============================================================================================== */
@@ -637,6 +797,8 @@ int main(void)
     all_passed &= RunRipRelativeTests();
     ZYAN_PRINTF("\nRange tests:\n");
     all_passed &= RunRangeTests();
+    ZYAN_PRINTF("\nFailure contract tests:\n");
+    all_passed &= RunFailureContractTests();
     ZYAN_PRINTF("\n");
     if (!all_passed)
     {

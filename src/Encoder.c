@@ -4597,38 +4597,75 @@ static ZyanStatus ZydisEncoderCheckRequestSanity(const ZydisEncoderRequest *requ
 /**
  * Encodes instruction with semantics specified in encoder request structure.
  *
+ * The instruction is assembled in a scratch buffer owned by the caller. The caller's output
+ * buffer is only written to after the whole encoding operation succeeded, which guarantees that
+ * a failed call never exposes a partially emitted instruction that could be mistaken for a
+ * complete one.
+ *
  * @param   request     A pointer to the `ZydisEncoderRequest` struct. Must be validated before
  *                      calling this function.
- * @param   buffer      A pointer to the output buffer receiving encoded instruction.
- * @param   length      A pointer to the variable containing length of the output buffer. Upon
- *                      successful return this variable receives length of the encoded instruction.
+ * @param   scratch     A pointer to a scratch buffer that receives the encoded instruction. Must
+ *                      be able to hold `ZYDIS_MAX_INSTRUCTION_LENGTH` bytes.
+ * @param   length      A pointer to the variable that receives length of the encoded instruction.
  * @param   instruction Internal state of the encoder.
  *
- * @return  A zyan status code.
+ * @return  A zyan status code. `ZYAN_STATUS_INSUFFICIENT_BUFFER_SIZE` is returned if the
+ *          instruction does not fit into `ZYDIS_MAX_INSTRUCTION_LENGTH` bytes.
  */
 static ZyanStatus ZydisEncoderEncodeInstructionInternal(const ZydisEncoderRequest *request,
-    void *buffer, ZyanUSize *length, ZydisEncoderInstruction *instruction)
+    ZyanU8 *scratch, ZyanUSize *length, ZydisEncoderInstruction *instruction)
 {
     ZydisEncoderInstructionMatch match;
     ZYAN_CHECK(ZydisFindMatchingDefinition(request, &match));
     ZydisEncoderBuffer output;
-    output.buffer = (ZyanU8 *)buffer;
-    output.size = *length > ZYDIS_MAX_INSTRUCTION_LENGTH
-        ? ZYDIS_MAX_INSTRUCTION_LENGTH
-        : *length;
+    output.buffer = scratch;
+    output.size = ZYDIS_MAX_INSTRUCTION_LENGTH;
     output.offset = 0;
     ZYAN_CHECK(ZydisBuildInstruction(&match, instruction));
-    ZyanStatus status = ZydisEmitInstruction(instruction, &output);
-    if ((status == ZYAN_STATUS_INSUFFICIENT_BUFFER_SIZE) &&
-        (output.size == ZYDIS_MAX_INSTRUCTION_LENGTH))
+    ZYAN_CHECK(ZydisEmitInstruction(instruction, &output));
+    *length = output.offset;
+    return ZYAN_STATUS_SUCCESS;
+}
+
+/**
+ * Publishes an encoded instruction to the caller's output buffer.
+ *
+ * The output buffer is only written to after the instruction was encoded successfully and fits
+ * into it. On failure the output buffer is left untouched and the reported length is zeroed, so
+ * callers never observe a partially written instruction.
+ *
+ * @param   status      Status code returned by the encoding phase.
+ * @param   scratch     A pointer to the scratch buffer holding the encoded instruction.
+ * @param   length      Length of the encoded instruction.
+ * @param   buffer      A pointer to the output buffer receiving encoded instruction.
+ * @param   capacity    Size of the output buffer in bytes.
+ * @param   out_length  A pointer to the variable that receives the encoded instruction length.
+ *
+ * @return  A zyan status code.
+ */
+static ZyanStatus ZydisEncoderPublishResult(ZyanStatus status, const ZyanU8 *scratch,
+    ZyanUSize length, void *buffer, ZyanUSize capacity, ZyanUSize *out_length)
+{
+    *out_length = 0;
+    if (status == ZYAN_STATUS_INSUFFICIENT_BUFFER_SIZE)
     {
-        return ZYDIS_STATUS_INSTRUCTION_TOO_LONG;
+        // The instruction did not fit into the internal `ZYDIS_MAX_INSTRUCTION_LENGTH`-byte
+        // scratch buffer. Report the caller's buffer as too small when it is shorter than that
+        // limit, otherwise the instruction exceeded the architectural length limit.
+        return (capacity < ZYDIS_MAX_INSTRUCTION_LENGTH)
+            ? ZYAN_STATUS_INSUFFICIENT_BUFFER_SIZE
+            : ZYDIS_STATUS_INSTRUCTION_TOO_LONG;
     }
-    else if (ZYAN_FAILED(status))
+    if (ZYAN_FAILED(status))
     {
         return status;
     }
-    *length = output.offset;
+    if (capacity < length)
+    {
+        return ZYAN_STATUS_INSUFFICIENT_BUFFER_SIZE;
+    }
+    ZYAN_MEMCPY(buffer, scratch, length);
+    *out_length = length;
     return ZYAN_STATUS_SUCCESS;
 }
 
@@ -4639,23 +4676,46 @@ static ZyanStatus ZydisEncoderEncodeInstructionInternal(const ZydisEncoderReques
 ZYDIS_EXPORT ZyanStatus ZydisEncoderEncodeInstruction(const ZydisEncoderRequest *request,
     void *buffer, ZyanUSize *length)
 {
-    if (!request || !buffer || !length)
+    if (!length)
+    {
+        return ZYAN_STATUS_INVALID_ARGUMENT;
+    }
+    const ZyanUSize capacity = *length;
+    *length = 0;
+    if (!request || !buffer)
     {
         return ZYAN_STATUS_INVALID_ARGUMENT;
     }
     ZYAN_CHECK(ZydisEncoderCheckRequestSanity(request));
 
+    ZyanU8 scratch[ZYDIS_MAX_INSTRUCTION_LENGTH];
     ZydisEncoderInstruction instruction;
-    return ZydisEncoderEncodeInstructionInternal(request, buffer, length, &instruction);
+    ZyanUSize encoded_length = 0;
+    const ZyanStatus encode_status = ZydisEncoderEncodeInstructionInternal(request, scratch,
+        &encoded_length, &instruction);
+    return ZydisEncoderPublishResult(encode_status, scratch, encoded_length, buffer, capacity,
+        length);
 }
 
-ZYDIS_EXPORT ZyanStatus ZydisEncoderEncodeInstructionAbsolute(ZydisEncoderRequest *request,
-    void *buffer, ZyanUSize *length, ZyanU64 runtime_address)
+/**
+ * Encodes instruction with absolute addresses in encoder request structure.
+ *
+ * This function modifies the relative operands and scaling hints of the passed request. Callers
+ * must be prepared for the request to be left in a modified state, even if encoding fails.
+ *
+ * @param   request         A pointer to the `ZydisEncoderRequest` struct. Must be validated before
+ *                          calling this function.
+ * @param   buffer          A pointer to the output buffer receiving encoded instruction.
+ * @param   capacity        Size of the output buffer in bytes.
+ * @param   length          A pointer to the variable that receives length of the encoded
+ *                          instruction.
+ * @param   runtime_address The runtime address of the instruction.
+ *
+ * @return  A zyan status code.
+ */
+static ZyanStatus ZydisEncoderEncodeInstructionAbsoluteInternal(ZydisEncoderRequest *request,
+    void *buffer, ZyanUSize capacity, ZyanUSize *length, ZyanU64 runtime_address)
 {
-    if (!request || !buffer || !length)
-    {
-        return ZYAN_STATUS_INVALID_ARGUMENT;
-    }
     ZYAN_CHECK(ZydisEncoderCheckRequestSanity(request));
 
     const ZydisEncoderRelInfo *rel_info = ZydisGetRelInfo(request->mnemonic);
@@ -4857,11 +4917,14 @@ ZYDIS_EXPORT ZyanStatus ZydisEncoderEncodeInstructionAbsolute(ZydisEncoderReques
         }
     }
 
+    ZyanU8 scratch[ZYDIS_MAX_INSTRUCTION_LENGTH];
     ZydisEncoderInstruction instruction;
-    ZYAN_CHECK(ZydisEncoderEncodeInstructionInternal(request, buffer, length, &instruction));
-    if (op_rip_rel)
+    ZyanUSize encoded_length = 0;
+    const ZyanStatus encode_status = ZydisEncoderEncodeInstructionInternal(request, scratch,
+        &encoded_length, &instruction);
+    if (ZYAN_SUCCESS(encode_status) && op_rip_rel)
     {
-        ZyanUSize instruction_size = *length;
+        const ZyanUSize instruction_size = encoded_length;
         if (runtime_address > ZYAN_UINT64_MAX - instruction_size + 1)
         {
             return ZYAN_STATUS_INVALID_ARGUMENT;
@@ -4879,16 +4942,53 @@ ZYDIS_EXPORT ZyanStatus ZydisEncoderEncodeInstructionAbsolute(ZydisEncoderReques
         }
         ZYAN_ASSERT(instruction_size > disp_offset);
 #if ZYAN_ENDIAN == ZYAN_LITTLE_ENDIAN
-        ZYAN_MEMCPY((ZyanU8 *)buffer + instruction_size - disp_offset, &rip_rel, sizeof(ZyanI32));
+        ZYAN_MEMCPY(scratch + instruction_size - disp_offset, &rip_rel, sizeof(ZyanI32));
 #else
         const ZyanU32 rip_rel_le = ZYAN_BYTESWAP32((ZyanU32)rip_rel);
-        ZYAN_MEMCPY((ZyanU8 *)buffer + instruction_size - disp_offset, &rip_rel_le,
-            sizeof(rip_rel_le));
+        ZYAN_MEMCPY(scratch + instruction_size - disp_offset, &rip_rel_le, sizeof(rip_rel_le));
 #endif
-        op_rip_rel->mem.displacement = rip_rel;
+    }
+    ZyanStatus status = ZydisEncoderPublishResult(encode_status, scratch, encoded_length, buffer,
+        capacity, length);
+    if (ZYAN_FAILED(status))
+    {
+        return status;
+    }
+    if (op_rip_rel)
+    {
+        op_rip_rel->mem.displacement = (ZyanI64)(absolute_address -
+            (runtime_address + encoded_length));
     }
 
     return ZYAN_STATUS_SUCCESS;
+}
+
+ZYDIS_EXPORT ZyanStatus ZydisEncoderEncodeInstructionAbsolute(ZydisEncoderRequest *request,
+    void *buffer, ZyanUSize *length, ZyanU64 runtime_address)
+{
+    if (!length)
+    {
+        return ZYAN_STATUS_INVALID_ARGUMENT;
+    }
+    const ZyanUSize capacity = *length;
+    *length = 0;
+    if (!request || !buffer)
+    {
+        return ZYAN_STATUS_INVALID_ARGUMENT;
+    }
+
+    // The internal implementation patches relative operands and scaling hints in the caller's
+    // request. Restore the original request on failure so a rejected call does not leave
+    // intermediate state behind for subsequent calls reusing the same structure.
+    const ZydisEncoderRequest request_backup = *request;
+    const ZyanStatus status = ZydisEncoderEncodeInstructionAbsoluteInternal(request, buffer,
+        capacity, length, runtime_address);
+    if (ZYAN_FAILED(status))
+    {
+        *request = request_backup;
+        *length = 0;
+    }
+    return status;
 }
 
 ZYDIS_EXPORT ZyanStatus ZydisEncoderDecodedInstructionToEncoderRequest(
