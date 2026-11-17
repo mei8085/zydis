@@ -3,6 +3,18 @@ py_exe = pymod.find_installation('python3', required: tests)
 
 tests_req = py_exe.found()
 
+if decoder.enabled() and minimal.disabled()
+  zydisdecoderstate_exe = executable(
+    'ZydisTestDecoderState',
+    files('decoder_state.c'),
+    dependencies: [zydis_dep],
+  )
+  test(
+    'ZydisDecoderState',
+    zydisdecoderstate_exe,
+  )
+endif
+
 if tests_req
   test(
     'ZydisRegression',

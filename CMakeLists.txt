@@ -534,6 +534,20 @@ if (ZYDIS_BUILD_TESTS)
     enable_testing()
     find_package(Python 3 REQUIRED)
 
+    if (ZYDIS_FEATURE_DECODER AND NOT ZYDIS_MINIMAL_MODE AND NOT ZYAN_NO_LIBC)
+        add_executable("ZydisTestDecoderState" "tests/decoder_state.c")
+        target_link_libraries("ZydisTestDecoderState" PUBLIC "Zydis")
+        set_target_properties("ZydisTestDecoderState" PROPERTIES FOLDER "Tests")
+        target_compile_definitions("ZydisTestDecoderState" PRIVATE "_CRT_SECURE_NO_WARNINGS")
+        zyan_set_common_flags("ZydisTestDecoderState")
+        zyan_maybe_enable_wpo("ZydisTestDecoderState")
+        _maybe_set_emscripten_cfg("ZydisTestDecoderState")
+        add_test(
+            NAME "ZydisDecoderState"
+            COMMAND "ZydisTestDecoderState"
+        )
+    endif ()
+
     if (TARGET ZydisInfo)
         add_test(
             NAME "ZydisRegression"
