@@ -28,6 +28,11 @@ if tests_req
   )
 endif
 
+test(
+  'ZydisEvexReversibility',
+  zydistestevexreversibility_exe,
+)
+
 summary(
   {'tests': tests_req},
   section: 'Features',

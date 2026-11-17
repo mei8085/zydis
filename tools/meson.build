@@ -7,6 +7,7 @@ zydisfuzzdecoder_exe = disabler()
 zydisfuzzencoder_exe = disabler()
 zydisfuzzreencoding_exe = disabler()
 zydistestencoderabsolute_exe = disabler()
+zydistestevexreversibility_exe = disabler()
 if tools_req
   if decoder.enabled() and formatter.enabled() and minimal.disabled()
     executable(
@@ -62,6 +63,14 @@ if tools_req
         include_directories: [inc, inc_private],
         implicit_include_directories: false,
         dependencies: [zycore_dep],
+        build_by_default: false,
+      )
+      zydistestevexreversibility_exe = executable(
+        'ZydisTestEvexReversibility',
+        files(
+          'ZydisTestEvexReversibility.c',
+        ),
+        dependencies: [zydis_dep],
         build_by_default: false,
       )
     endif
