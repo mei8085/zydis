@@ -147,6 +147,51 @@ that Zydis provides about an instruction.
 
 ![ZydisInfo](./assets/screenshots/ZydisInfo.png)
 
+Pass `-anti` to additionally print the anti-analysis classification of the
+instruction (see below).
+
+## Anti-analysis classification
+
+Some instructions are a strong hint that a binary is trying to detect an
+analysis environment: timing (`RDTSC`, `RDPMC`), processor identification
+(`CPUID`), descriptor-table reads (`SIDT`, `SGDT`, `SLDT`, `STR`, `SMSW`),
+I/O-port access (`IN`/`OUT`), debugger breakpoints (`INT3`) or hypervisor
+interfaces (`VMCALL`, `VMRUN`, ...).
+
+`ZydisClassifyAntiAnalysis` classifies an already decoded instruction and
+`ZydisDecoderDecodeAntiAnalysis` decodes and classifies in one call. Neither
+changes the regular decode result: mnemonic, operands, instruction length and
+status codes are identical to `ZydisDecoderDecodeFull`.
+
+Each signal falls into exactly one of these classes:
+
+| Class | Meaning |
+| --- | --- |
+| `ARCHITECTURAL` | Necessarily valid in the current machine mode; no optional CPU feature involved. |
+| `FEATURE_DEPENDENT` | Only valid if a specific CPU feature is present (`isa_ext` names it), otherwise `#UD`. |
+| `PROCESSOR_DEPENDENT` | Legal encoding whose meaning or availability depends on the processor/vendor (e.g. `LZCNT`/`BSR`, `PAUSE`/`REP NOP`, undocumented opcodes, `VTX`/`SVM`). |
+| `UNRELATED` | Not an anti-analysis instruction. |
+
+The classification is derived exclusively from the final decoder result, so
+prefix combinations and alias encodings that decode to a regular instruction
+(`F3 0F 0D C8` is a `NOP`, not `PREFETCHW`) are never reported as signals, and
+truncated input keeps the regular decoder's error codes and is never
+classified.
+
+```c
+ZydisDecodedInstruction instruction;
+ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+ZydisAntiAnalysisInfo info;
+if (ZYAN_SUCCESS(ZydisDecoderDecodeAntiAnalysis(&decoder, buffer, length,
+        &instruction, operands, &info)) &&
+    info.classification != ZYDIS_ANTIANALYSIS_CLASS_UNRELATED)
+{
+    printf("%s (%s, length %u)\n",
+        ZydisAntiAnalysisClassGetString(info.classification),
+        ZydisISAExtGetString(info.isa_ext), info.length);
+}
+```
+
 ## Bindings
 
 Official bindings exist for a selection of languages:

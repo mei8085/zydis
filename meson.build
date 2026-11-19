@@ -171,6 +171,7 @@ src = files(
 
 if decoder.enabled()
   hdrs_common += files(
+    'include/Zydis/AntiAnalysis.h',
     'include/Zydis/Decoder.h',
     'include/Zydis/DecoderTypes.h',
   )
@@ -178,6 +179,7 @@ if decoder.enabled()
     'include/Zydis/Internal/DecoderData.h',
   )
   src += files(
+    'src/AntiAnalysis.c',
     'src/Decoder.c',
     'src/DecoderData.c',
   )

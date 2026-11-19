@@ -1,0 +1,36 @@
+== [    BASIC ] ============================================================================================
+   MNEMONIC: cpuid [ENC: DEFAULT, MAP: 0F, OPC: 0xA2]
+     LENGTH:  2
+        SSZ: 64
+       EOSZ: 32
+       EASZ: 64
+   CATEGORY: MISC
+    ISA-SET: I486REAL
+    ISA-EXT: BASE
+ EXCEPTIONS: NONE
+  ANTI-ANAL: ARCHITECTURAL
+     AA-EXT: NONE
+     AA-LEN: 2
+     AA-OPS: 4
+  OPTIMIZED: 0F A2 
+
+== [ OPERANDS ] ============================================================================================
+##       TYPE  VISIBILITY  ACTION      ENCODING   SIZE  NELEM  ELEMSZ  ELEMTYPE                        VALUE
+--  ---------  ----------  ------  ------------   ----  -----  ------  --------  ---------------------------
+ 0   REGISTER      HIDDEN      RW          NONE     32      1      32       INT                          eax
+ 1   REGISTER      HIDDEN       W          NONE     32      1      32       INT                          ebx
+ 2   REGISTER      HIDDEN     CRW          NONE     32      1      32       INT                          ecx
+ 3   REGISTER      HIDDEN       W          NONE     32      1      32       INT                          edx
+--  ---------  ----------  ------  ------------   ----  -----  ------  --------  ---------------------------
+
+== [      ATT ] ============================================================================================
+   ABSOLUTE: cpuid
+   RELATIVE: cpuid
+
+== [    INTEL ] ============================================================================================
+   ABSOLUTE: cpuid
+   RELATIVE: cpuid
+
+== [ SEGMENTS ] ============================================================================================
+0F A2 
+:..OPCODE

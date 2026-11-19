@@ -245,9 +245,11 @@ target_sources("Zydis"
 if (ZYDIS_FEATURE_DECODER)
     target_sources("Zydis"
         PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/include/Zydis/AntiAnalysis.h"
             "${CMAKE_CURRENT_LIST_DIR}/include/Zydis/Decoder.h"
             "${CMAKE_CURRENT_LIST_DIR}/include/Zydis/DecoderTypes.h"
             "${CMAKE_CURRENT_LIST_DIR}/include/Zydis/Internal/DecoderData.h"
+            "src/AntiAnalysis.c"
             "src/Decoder.c"
             "src/DecoderData.c")
     if (ZYDIS_FEATURE_ENCODER)
@@ -533,6 +535,20 @@ endif ()
 if (ZYDIS_BUILD_TESTS)
     enable_testing()
     find_package(Python 3 REQUIRED)
+
+    if (ZYDIS_FEATURE_DECODER AND NOT ZYDIS_MINIMAL_MODE AND NOT ZYAN_NO_LIBC)
+        add_executable("ZydisTestAntiAnalysis" "tests/anti_analysis.c")
+        target_link_libraries("ZydisTestAntiAnalysis" PUBLIC "Zydis")
+        set_target_properties("ZydisTestAntiAnalysis" PROPERTIES FOLDER "Tests")
+        target_compile_definitions("ZydisTestAntiAnalysis" PRIVATE "_CRT_SECURE_NO_WARNINGS")
+        zyan_set_common_flags("ZydisTestAntiAnalysis")
+        zyan_maybe_enable_wpo("ZydisTestAntiAnalysis")
+        _maybe_set_emscripten_cfg("ZydisTestAntiAnalysis")
+        add_test(
+            NAME "ZydisAntiAnalysis"
+            COMMAND "ZydisTestAntiAnalysis"
+        )
+    endif ()
 
     if (TARGET ZydisInfo)
         add_test(

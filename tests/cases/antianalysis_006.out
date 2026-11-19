@@ -1,0 +1,29 @@
+== [    BASIC ] ============================================================================================
+   MNEMONIC: vmmcall [ENC: DEFAULT, MAP: 0F, OPC: 0x01]
+     LENGTH:  3
+        SSZ: 64
+       EOSZ: 32
+       EASZ: 64
+   CATEGORY: SYSTEM
+    ISA-SET: SVM
+    ISA-EXT: SVM
+ EXCEPTIONS: NONE
+  ANTI-ANAL: PROCESSOR_DEPENDENT
+     AA-EXT: SVM
+     AA-LEN: 3
+     AA-OPS: 0
+ ATTRIBUTES: HAS_MODRM 
+  OPTIMIZED: 0F 01 D9 
+
+== [      ATT ] ============================================================================================
+   ABSOLUTE: vmmcall
+   RELATIVE: vmmcall
+
+== [    INTEL ] ============================================================================================
+   ABSOLUTE: vmmcall
+   RELATIVE: vmmcall
+
+== [ SEGMENTS ] ============================================================================================
+0F 01 D9 
+:     :..MODRM
+:..OPCODE

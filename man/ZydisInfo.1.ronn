@@ -32,9 +32,20 @@ You can also specify the stack width one of the following options
 
   * `-32`:
     32 bits
-  
+
   * `-64`:
     64 bits
+
+Additional flags
+
+  * `-knc`:
+    enable the `KNC` decoder mode
+
+  * `-anti`:
+    print the anti-analysis classification of the instruction
+    (`ARCHITECTURAL`, `FEATURE_DEPENDENT`, `PROCESSOR_DEPENDENT` or
+    `UNRELATED`) together with the gating ISA extension, length and operand
+    count
 
 ## EXAMPLES
 
@@ -51,6 +62,16 @@ You can also specify the stack width one of the following options
      EXCEPTIONS: NONE
      ATTRIBUTES: HAS_MODRM HAS_SIB HAS_REX CPUFLAG_ACCESS ACCEPTS_LOCK
     [...more info...]
+
+    $ ZydisInfo -64 -anti 0F A2
+    == [    BASIC ] ==================================================
+       MNEMONIC: cpuid [ENC: DEFAULT, MAP: 0F, OPC: 0xA2]
+         LENGTH: 2
+    [...more info...]
+      ANTI-ANAL: ARCHITECTURAL
+         AA-EXT: NONE
+         AA-LEN: 2
+         AA-OPS: 4
 
 ## SEE ALSO
 

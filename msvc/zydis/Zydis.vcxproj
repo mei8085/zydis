@@ -936,6 +936,7 @@
     <ClCompile Include="..\..\src\String.c" />
     <ClCompile Include="..\..\src\Utils.c" />
     <ClCompile Include="..\..\src\Zydis.c" />
+    <ClCompile Include="..\..\src\AntiAnalysis.c" />
     <ClCompile Include="..\..\src\Decoder.c" />
     <ClCompile Include="..\..\src\DecoderData.c" />
     <ClCompile Include="..\..\src\Formatter.c" />
@@ -961,6 +962,7 @@
     <ClInclude Include="..\..\dependencies\zycore\include\Zycore\Types.h" />
     <ClInclude Include="..\..\dependencies\zycore\include\Zycore\Vector.h" />
     <ClInclude Include="..\..\dependencies\zycore\include\Zycore\Zycore.h" />
+    <ClInclude Include="..\..\include\Zydis\AntiAnalysis.h" />
     <ClInclude Include="..\..\include\Zydis\Decoder.h" />
     <ClInclude Include="..\..\include\Zydis\DecoderTypes.h" />
     <ClInclude Include="..\..\include\Zydis\Defines.h" />

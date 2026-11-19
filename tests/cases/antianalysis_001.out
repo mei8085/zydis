@@ -1,0 +1,30 @@
+== [    BASIC ] ============================================================================================
+   MNEMONIC: endbr64 [ENC: DEFAULT, MAP: 0F, OPC: 0x1E]
+     LENGTH:  4
+        SSZ: 64
+       EOSZ: 32
+       EASZ: 64
+   CATEGORY: CET
+    ISA-SET: CET
+    ISA-EXT: CET
+ EXCEPTIONS: NONE
+  ANTI-ANAL: PROCESSOR_DEPENDENT
+     AA-EXT: CET
+     AA-LEN: 4
+     AA-OPS: 0
+ ATTRIBUTES: HAS_MODRM 
+  OPTIMIZED: F3 0F 1E FA 
+
+== [      ATT ] ============================================================================================
+   ABSOLUTE: endbr64
+   RELATIVE: endbr64
+
+== [    INTEL ] ============================================================================================
+   ABSOLUTE: endbr64
+   RELATIVE: endbr64
+
+== [ SEGMENTS ] ============================================================================================
+F3 0F 1E FA 
+:  :     :..MODRM
+:  :..OPCODE
+:..PREFIXES

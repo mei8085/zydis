@@ -46,6 +46,14 @@
 /* Configuration                                                                                  */
 /* ---------------------------------------------------------------------------------------------- */
 
+/**
+ * Controls whether the anti-analysis classification is printed.
+ *
+ * Disabled by default to keep the regular output (and thus the regression
+ * corpus) unchanged for all instructions.
+ */
+static ZyanBool g_print_anti_analysis = ZYAN_FALSE;
+
 #define COLOR_HEADER        ZYAN_VT100SGR_FG_DEFAULT
 #define COLOR_HEADER_TITLE  ZYAN_VT100SGR_FG_CYAN
 #define COLOR_VALUE_LABEL   ZYAN_VT100SGR_FG_DEFAULT
@@ -1177,6 +1185,21 @@ static void PrintInstruction(const ZydisDecoder* decoder,
     PRINT_VALUE_B("ISA-EXT"   , "%s" , ZydisISAExtGetString(instruction->meta.isa_ext));
     PRINT_VALUE_B("EXCEPTIONS", "%s" , exception_classes[instruction->meta.exception_class]);
 
+    if (g_print_anti_analysis)
+    {
+        ZydisAntiAnalysisInfo anti;
+        ZYAN_ASSERT(instruction);
+        if (ZYAN_SUCCESS(ZydisClassifyAntiAnalysis(instruction, &anti)))
+        {
+            PRINT_VALUE_B("ANTI-ANAL", "%s" ,
+                ZydisAntiAnalysisClassGetString(anti.classification));
+            PRINT_VALUE_B("AA-EXT"   , "%s" , (anti.isa_ext != ZYDIS_ISA_EXT_INVALID) ?
+                ZydisISAExtGetString(anti.isa_ext) : "NONE");
+            PRINT_VALUE_B("AA-LEN"   , "%d" , anti.length);
+            PRINT_VALUE_B("AA-OPS"   , "%d" , anti.operand_count);
+        }
+    }
+
     if (instruction->attributes)
     {
         PrintValueLabel("ATTRIBUTES");
@@ -1246,9 +1269,11 @@ static void PrintInstruction(const ZydisDecoder* decoder,
 
 void PrintUsage(int argc, char* argv[])
 {
-    ZYAN_FPRINTF(ZYAN_STDERR, "%sUsage: %s <machine_mode> [stack_width] [-knc] <hexbytes>\n\n"
+    ZYAN_FPRINTF(ZYAN_STDERR, "%sUsage: %s <machine_mode> [stack_width] [-knc] [-anti] "
+        "<hexbytes>\n\n"
         "Machine mode:      -real|-16|-32|-64\n"
-        "Stack width:       -16|-32|-64%s\n",
+        "Stack width:       -16|-32|-64\n"
+        "Classification:    -anti (print the anti-analysis classification)%s\n",
         CVT100_ERR(COLOR_ERROR), (argc > 0 ? argv[0] : "ZydisInfo"),
         CVT100_ERR(ZYAN_VT100SGR_RESET));
 }
@@ -1295,6 +1320,11 @@ int main(int argc, char** argv)
         if (!ZYAN_STRCMP(argv[arg_index], "-knc"))
         {
             use_knc = ZYAN_TRUE;
+            continue;
+        }
+        if (!ZYAN_STRCMP(argv[arg_index], "-anti"))
+        {
+            g_print_anti_analysis = ZYAN_TRUE;
             continue;
         }
         if (ZYAN_ARRAY_LENGTH(options) == options_count)

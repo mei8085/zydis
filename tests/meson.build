@@ -3,6 +3,18 @@ py_exe = pymod.find_installation('python3', required: tests)
 
 tests_req = py_exe.found()
 
+if decoder.enabled() and minimal.disabled()
+  zydis_antianalysis_exe = executable(
+    'ZydisTestAntiAnalysis',
+    files('anti_analysis.c'),
+    dependencies: [zydis_dep],
+  )
+  test(
+    'ZydisAntiAnalysis',
+    zydis_antianalysis_exe,
+  )
+endif
+
 if tests_req
   test(
     'ZydisRegression',
